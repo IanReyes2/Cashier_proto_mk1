@@ -1,0 +1,104 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id        String   @id @default(cuid())
+  email     String   @unique
+  name      String
+  password  String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  transactions Transaction[]
+
+  @@map("users")
+}
+
+model Customer {
+  id        String   @id @default(cuid())
+  name      String
+  email     String?  @unique
+  phone     String?
+  address   String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  transactions Transaction[]
+
+  @@map("customers")
+}
+
+model Product {
+  id          String   @id @default(cuid())
+  name        String
+  description String?
+  price       Decimal  @db.Decimal(10, 2)
+  stock       Int      @default(0)
+  category    String?
+  barcode     String?  @unique
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Relations
+  transactionItems TransactionItem[]
+
+  @@map("products")
+}
+
+model Transaction {
+  id          String            @id @default(cuid())
+  total       Decimal           @db.Decimal(10, 2)
+  subtotal    Decimal           @db.Decimal(10, 2)
+  tax         Decimal           @db.Decimal(10, 2) @default(0)
+  discount    Decimal           @db.Decimal(10, 2) @default(0)
+  status      TransactionStatus @default(COMPLETED)
+  paymentMethod String          @default("cash")
+  createdAt   DateTime          @default(now())
+  updatedAt   DateTime          @updatedAt
+
+  // Foreign Keys
+  userId     String
+  customerId String?
+
+  // Relations
+  user     User                @relation(fields: [userId], references: [id])
+  customer Customer?           @relation(fields: [customerId], references: [id])
+  items    TransactionItem[]
+
+  @@map("transactions")
+}
+
+model TransactionItem {
+  id       String  @id @default(cuid())
+  quantity Int
+  price    Decimal @db.Decimal(10, 2)
+  subtotal Decimal @db.Decimal(10, 2)
+
+  // Foreign Keys
+  transactionId String
+  productId     String
+
+  // Relations
+  transaction Transaction @relation(fields: [transactionId], references: [id], onDelete: Cascade)
+  product     Product     @relation(fields: [productId], references: [id])
+
+  @@map("transaction_items")
+}
+
+enum TransactionStatus {
+  PENDING
+  COMPLETED
+  CANCELLED
+  REFUNDED
+}
