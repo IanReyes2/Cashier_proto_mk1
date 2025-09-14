@@ -40,17 +40,17 @@ export default function LoginPage() {
     <div className="min-h-screen flex items-center justify-center bg-muted/50 p-4">
       <Card className="w-full max-w-md">
         <CardHeader className="text-center">
-          <CardTitle className="text-2xl font-bold">Cashier System</CardTitle>
+          <CardTitle className="text-2xl font-bold">The FrancisCanteen Admin</CardTitle>
           <CardDescription>Sign in to access your dashboard</CardDescription>
         </CardHeader>
         <CardContent>
           <form onSubmit={handleSubmit} className="space-y-4">
             <div className="space-y-2">
-              <Label htmlFor="email">Email</Label>
+              <Label htmlFor="email">Username</Label>
               <Input
                 id="email"
                 type="email"
-                placeholder="Enter your email"
+                placeholder="Enter your username"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 required
@@ -74,19 +74,15 @@ export default function LoginPage() {
                 <AlertDescription>{error}</AlertDescription>
               </Alert>
             )}
-            <Button type="submit" className="w-full" disabled={isLoading}>
+            <Button type="submit" className="w-full bg-[#800000] hover:bg-[#9c4c4c] text-white" disabled={isLoading}>
               {isLoading ? "Signing in..." : "Sign In"}
             </Button>
           </form>
           <div className="mt-6 text-sm text-muted-foreground">
-            <p className="text-center">Demo Credentials:</p>
+            <p className="text-center">USE THIS:</p>
             <div className="mt-2 space-y-1 text-xs">
               <p>
-                Cashier: email: <code className="bg-muted px-1 rounded">cashier@example.com</code>, password:{" "}
-                <code className="bg-muted px-1 rounded">password</code>
-              </p>
-              <p>
-                Admin: email: <code className="bg-muted px-1 rounded">admin@example.com</code>, password:{" "}
+                Admin: username: <code className="bg-muted px-1 rounded">JuanDelaCruz</code>, password:{" "}
                 <code className="bg-muted px-1 rounded">admin123</code>
               </p>
             </div>
