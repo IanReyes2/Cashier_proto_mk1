@@ -5,7 +5,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { History, Users, LogOut } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { API_URL, WS_URL } from "../../config" // adjust path if needed
+import { API_URL, WS_URL } from "../../config";
 
 
 interface OrderItem {
@@ -22,6 +22,44 @@ interface User {
   email: string;
   role: string;
   lastActive: string;
+}
+
+// Helper component for displaying full orders
+function OrderCard({ order }: { order: OrderItem }) {
+  return (
+    <Card className="hover:shadow-lg transition-shadow duration-200">
+      <CardContent className="p-6">
+        <div className="flex justify-between items-start mb-3">
+          <h3 className="text-lg font-semibold text-gray-800">
+            Order #{order.id}
+          </h3>
+          <span className="text-lg font-bold text-red-900">₱{order.total}</span>
+        </div>
+
+        <ul className="list-disc pl-5 mb-3 text-gray-700 text-sm">
+          {order.items.map((item, index) => (
+            <li key={index}>
+              {item.name} – ₱{item.price}
+            </li>
+          ))}
+        </ul>
+
+        <div className="text-xs text-gray-500 mb-3">
+          <p>
+            Status: <span className="font-medium">{order.status}</span>
+          </p>
+          <p>Date: {order.orderDate}</p>
+        </div>
+
+        <Button
+          onClick={() => console.log("Manage order:", order.id)}
+          className="w-full bg-red-900 hover:bg-red-800 text-white"
+        >
+          Manage This Order
+        </Button>
+      </CardContent>
+    </Card>
+  );
 }
 
 export default function MenuDashboard() {
@@ -75,8 +113,13 @@ export default function MenuDashboard() {
           setOrders(data.orders);
         } else if (data.type === "new_order") {
           setOrders((prev) => [...prev, data.order]);
+        } else if (data.type === "status_update") {
+          setOrders((prev) =>
+            prev.map((o) => (o.id === data.order.id ? data.order : o))
+          );
         }
       };
+
       wsRef.current.onclose = () => console.log("WebSocket disconnected");
 
       return () => wsRef.current?.close();
@@ -101,10 +144,39 @@ export default function MenuDashboard() {
     setSelectedOrder(order);
   };
 
-  const handleProceedToCanteen = () => {
-    console.log("Proceeding to canteen for order:", selectedOrder?.id);
+  const handleProceedToCanteen = async () => {
+  if (!selectedOrder) return;
+
+  try {
+    const res = await fetch(`${API_URL}/api/orders`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        items: selectedOrder.items.map((i) => ({
+          id: i.name, // temporary id since cashier doesn’t assign one
+          name: i.name,
+          quantity: 1, // or add quantity selection in cashier UI later
+        })),
+        customerName: "Walk-in", // placeholder, can extend later
+        totalAmount: selectedOrder.total,
+        estimatedTime: 15, // optional
+      }),
+    });
+
+    const result = await res.json();
+
+    if (res.ok && result.success) {
+      console.log("✅ Order sent to kitchen:", result.data);
+      alert(`Order ${result.data.orderNumber} created successfully!`);
+    } else {
+      console.error("❌ Failed to send order:", result.error || result);
+    }
+  } catch (err) {
+    console.error("⚠️ Error sending order:", err);
+  } finally {
     setSelectedOrder(null);
-  };
+  }
+};
 
   const handleDenyOrder = () => {
     console.log("Denying order:", selectedOrder?.id);
@@ -139,7 +211,9 @@ export default function MenuDashboard() {
               return (
                 <Button
                   key={category.id}
-                  variant={selectedCategory === category.id ? "secondary" : "ghost"}
+                  variant={
+                    selectedCategory === category.id ? "secondary" : "ghost"
+                  }
                   className={`w-full justify-start text-left p-4 h-auto ${
                     selectedCategory === category.id
                       ? "bg-white text-red-900 hover:bg-gray-100"
@@ -176,7 +250,9 @@ export default function MenuDashboard() {
                   <h4 className="font-semibold">
                     {selectedOrder.items.map((i) => i.name).join(", ")}
                   </h4>
-                  <p className="text-red-900 font-bold">₱{selectedOrder.total}</p>
+                  <p className="text-red-900 font-bold">
+                    ₱{selectedOrder.total}
+                  </p>
                 </div>
                 <div className="flex gap-3">
                   <Button
@@ -222,42 +298,43 @@ export default function MenuDashboard() {
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
               {selectedCategory === "history"
-                ? orders.flatMap((order) =>
-                    order.items.map((item, idx) => (
-                      <Card
-                        key={`${order.id}-${idx}`}
-                        className="hover:shadow-lg transition-shadow duration-200"
-                      >
-                        <CardContent className="p-6">
-                          <div className="flex justify-between items-start mb-3">
-                            <h3 className="text-lg font-semibold text-gray-800">
-                              {item.name}
-                            </h3>
-                            <span className="text-lg font-bold text-red-900">
-                              ₱{item.price}
-                            </span>
-                          </div>
-                          <div className="text-xs text-gray-500 mb-3">
-                            <p>
-                              Order ID:{" "}
-                              <span className="font-medium">{order.id}</span>
+                ? orders.map((order) => (
+                    <Card
+                      key={order.id}
+                      className="hover:shadow-lg transition-shadow duration-200"
+                    >
+                      <CardContent className="p-6">
+                        <div className="flex justify-between items-start mb-3">
+                          <h3 className="text-lg font-semibold text-gray-800">
+                            Order #{order.id}
+                          </h3>
+                          <span className="text-lg font-bold text-red-900">
+                            ₱{order.total}
+                          </span>
+                        </div>
+                        <div className="text-xs text-gray-500 mb-3">
+                          <p>
+                            Status:{" "}
+                            <span className="font-medium">{order.status}</span>
+                          </p>
+                          <p>Date: {order.orderDate}</p>
+                        </div>
+                        <div className="mt-4 space-y-1">
+                          {order.items.map((item, idx) => (
+                            <p key={idx} className="text-sm text-gray-700">
+                              • {item.name} — ₱{item.price}
                             </p>
-                            <p>
-                              Status:{" "}
-                              <span className="font-medium">{order.status}</span>
-                            </p>
-                            <p>Date: {order.orderDate}</p>
-                          </div>
-                          <Button
-                            onClick={() => handleManageOrder(order)}
-                            className="w-full bg-red-900 hover:bg-red-800 text-white"
-                          >
-                            Manage This Order
-                          </Button>
-                        </CardContent>
-                      </Card>
-                    ))
-                  )
+                          ))}
+                        </div>
+                        <Button
+                          onClick={() => handleManageOrder(order)}
+                          className="w-full mt-4 bg-red-900 hover:bg-red-800 text-white"
+                        >
+                          Manage This Order
+                        </Button>
+                      </CardContent>
+                    </Card>
+                  ))
                 : users.map((user) => (
                     <Card
                       key={user.id}

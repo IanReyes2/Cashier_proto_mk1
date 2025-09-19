@@ -1,5 +1,5 @@
 import { type NextRequest, NextResponse } from "next/server";
-import { prisma } from "@/lib/prisma"; 
+import { prisma } from "@/lib/prisma";
 import jwt from "jsonwebtoken";
 
 export async function POST(request: NextRequest) {
@@ -13,36 +13,47 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Find user by email
-    const user = await prisma.user.findUnique({
+    // Find customer by email
+    const Customer = await prisma.customer.findUnique({
       where: { email },
     });
 
-    if (!user) {
-      return NextResponse.json({ error: "Invalid credentials" }, { status: 401 });
+    console.log("Login attempt:", { email, Customer });
+
+    if (!Customer) {
+      return NextResponse.json(
+        { error: "Invalid credentials" },
+        { status: 401 }
+      );
     }
 
     // Simple password check (no hashing)
-    if (user.password !== password) {
-      return NextResponse.json({ error: "Invalid credentials" }, { status: 401 });
+    if (Customer.password !== password) {
+      return NextResponse.json(
+        { error: "Invalid credentials" },
+        { status: 401 }
+      );
     }
 
     // Generate JWT token
     const token = jwt.sign(
-      { userId: user.id, email: user.email },
+      { userId: Customer.id, email: Customer.email },
       process.env.JWT_SECRET || "fallback-secret",
       { expiresIn: "24h" }
     );
 
-    // Remove password from user object
-    const { password: _, ...userWithoutPassword } = user;
+    // Remove password from customer object
+    const { password: _, ...customerWithoutPassword } = Customer;
 
     return NextResponse.json({
-      user: userWithoutPassword,
+      user: customerWithoutPassword,
       token,
     });
   } catch (error) {
     console.error("Login error:", error);
-    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
+    return NextResponse.json(
+      { error: "Internal server error" },
+      { status: 500 }
+    );
   }
 }
