@@ -8,7 +8,7 @@ import { Suspense } from "react"
 import "./globals.css"
 
 export const metadata: Metadata = {
-  title: "Cashier System",
+  title: "The FrancisCanteen",
   description: "Point of Sale Cashier Dashboard",
   generator: "v0.app",
 }

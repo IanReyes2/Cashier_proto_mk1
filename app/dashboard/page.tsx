@@ -7,10 +7,9 @@ import { History, Users, LogOut } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { API_URL, WS_URL } from "../../config";
 
-
 interface OrderItem {
   id: number;
-  items: { name: string; price: string; description?: string }[];
+  items: { name: string; price: number; description?: string }[];
   total: number;
   status: string;
   orderDate: string;
@@ -24,44 +23,6 @@ interface User {
   lastActive: string;
 }
 
-// Helper component for displaying full orders
-function OrderCard({ order }: { order: OrderItem }) {
-  return (
-    <Card className="hover:shadow-lg transition-shadow duration-200">
-      <CardContent className="p-6">
-        <div className="flex justify-between items-start mb-3">
-          <h3 className="text-lg font-semibold text-gray-800">
-            Order #{order.id}
-          </h3>
-          <span className="text-lg font-bold text-red-900">₱{order.total}</span>
-        </div>
-
-        <ul className="list-disc pl-5 mb-3 text-gray-700 text-sm">
-          {order.items.map((item, index) => (
-            <li key={index}>
-              {item.name} – ₱{item.price}
-            </li>
-          ))}
-        </ul>
-
-        <div className="text-xs text-gray-500 mb-3">
-          <p>
-            Status: <span className="font-medium">{order.status}</span>
-          </p>
-          <p>Date: {order.orderDate}</p>
-        </div>
-
-        <Button
-          onClick={() => console.log("Manage order:", order.id)}
-          className="w-full bg-red-900 hover:bg-red-800 text-white"
-        >
-          Manage This Order
-        </Button>
-      </CardContent>
-    </Card>
-  );
-}
-
 export default function MenuDashboard() {
   const [selectedCategory, setSelectedCategory] = useState<"history" | "users">(
     "history"
@@ -73,14 +34,16 @@ export default function MenuDashboard() {
   const wsRef = useRef<WebSocket | null>(null);
   const router = useRouter();
 
-  // Fetch initial data
+  // Fetch orders: only pending
   const fetchOrders = async () => {
     setLoading(true);
     try {
       const res = await fetch(`${API_URL}/api/order`);
-
       const data: OrderItem[] = await res.json();
-      setOrders(data);
+
+      // Only show pending orders
+      const pendingOrders = data.filter((o) => o.status === "pending");
+      setOrders(pendingOrders);
     } catch (err) {
       console.error("Failed to fetch orders:", err);
     } finally {
@@ -91,7 +54,7 @@ export default function MenuDashboard() {
   const fetchUsers = async () => {
     setLoading(true);
     try {
-      const res = await fetch("/api/users"); // your user endpoint
+      const res = await fetch("/api/users");
       const data: User[] = await res.json();
       setUsers(data);
     } catch (err) {
@@ -101,38 +64,46 @@ export default function MenuDashboard() {
     }
   };
 
-  // WebSocket setup
+  // WebSocket: only pending orders are displayed
   useEffect(() => {
-    if (selectedCategory === "history") {
-      wsRef.current = new WebSocket(WS_URL);
+    if (selectedCategory !== "history") return;
 
-      wsRef.current.onopen = () => console.log("WebSocket connected");
-      wsRef.current.onmessage = (event) => {
+    wsRef.current = new WebSocket(WS_URL);
+    wsRef.current.onopen = () => console.log("WebSocket connected");
+
+    wsRef.current.onmessage = (event) => {
+      try {
         const data = JSON.parse(event.data);
+
         if (data.type === "init") {
-          setOrders(data.orders);
-        } else if (data.type === "new_order") {
-          setOrders((prev) => [...prev, data.order]);
-        } else if (data.type === "status_update") {
-          setOrders((prev) =>
-            prev.map((o) => (o.id === data.order.id ? data.order : o))
+          setOrders(
+            data.orders
+              .filter((o: OrderItem) => o.status === "pending")
+              .map((o: OrderItem) => ({ ...o }))
           );
-        }
-      };
+        } else if (data.type === "new_order") {
+          if (data.order.status === "pending") {
+            setOrders((prev) => {
+              if (prev.find((o) => o.id === data.order.id)) return prev;
+              return [...prev, data.order];
+            });
+          }
+        } else if (data.type === "status_update") {
+          // Remove from cashier dashboard if status changes
+          setOrders((prev) => prev.filter((o) => o.id !== data.order.id));
+        } else if (data.type === "clear") setOrders([]);
+      } catch (e) {
+        console.error("Invalid WebSocket message", e);
+      }
+    };
 
-      wsRef.current.onclose = () => console.log("WebSocket disconnected");
-
-      return () => wsRef.current?.close();
-    }
+    wsRef.current.onclose = () => console.log("WebSocket disconnected");
+    return () => wsRef.current?.close();
   }, [selectedCategory]);
 
-  // Fetch users if selected
   useEffect(() => {
-    if (selectedCategory === "history") {
-      fetchOrders();
-    } else {
-      fetchUsers();
-    }
+    if (selectedCategory === "history") fetchOrders();
+    else fetchUsers();
   }, [selectedCategory]);
 
   const handleLogout = () => {
@@ -140,48 +111,60 @@ export default function MenuDashboard() {
     router.push("/login");
   };
 
-  const handleManageOrder = (order: OrderItem) => {
-    setSelectedOrder(order);
-  };
+  const handleManageOrder = (order: OrderItem) => setSelectedOrder(order);
 
   const handleProceedToCanteen = async () => {
-  if (!selectedOrder) return;
+    if (!selectedOrder) return;
 
-  try {
-    const res = await fetch(`${API_URL}/api/orders`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        items: selectedOrder.items.map((i) => ({
-          id: i.name, // temporary id since cashier doesn’t assign one
-          name: i.name,
-          quantity: 1, // or add quantity selection in cashier UI later
-        })),
-        customerName: "Walk-in", // placeholder, can extend later
-        totalAmount: selectedOrder.total,
-        estimatedTime: 15, // optional
-      }),
-    });
+    // Update status locally first
+    setOrders((prev) =>
+      prev.map((o) =>
+        o.id === selectedOrder.id ? { ...o, status: "confirmed" } : o
+      )
+    );
 
-    const result = await res.json();
+    try {
+      const res = await fetch(`${API_URL}/api/order`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          items: selectedOrder.items.map((i) => ({
+            name: i.name,
+            price: i.price,
+            quantity: 1,
+          })),
+          total: selectedOrder.total,
+          orderCode: `CASH-${selectedOrder.id}-${Date.now()}`,
+          status: "confirmed",
+        }),
+      });
+      const result = await res.json();
 
-    if (res.ok && result.success) {
-      console.log("✅ Order sent to kitchen:", result.data);
-      alert(`Order ${result.data.orderNumber} created successfully!`);
-    } else {
-      console.error("❌ Failed to send order:", result.error || result);
+      if (res.ok) {
+        // Remove from frontend state after backend confirms
+        setOrders((prev) => prev.filter((o) => o.id !== selectedOrder.id));
+        setSelectedOrder(null);
+      } else {
+        console.error("Failed to send order", result);
+        // rollback status
+        setOrders((prev) =>
+          prev.map((o) =>
+            o.id === selectedOrder.id ? { ...o, status: "pending" } : o
+          )
+        );
+      }
+    } catch (err) {
+      console.error(err);
+      // rollback status
+      setOrders((prev) =>
+        prev.map((o) =>
+          o.id === selectedOrder.id ? { ...o, status: "pending" } : o
+        )
+      );
     }
-  } catch (err) {
-    console.error("⚠️ Error sending order:", err);
-  } finally {
-    setSelectedOrder(null);
-  }
-};
-
-  const handleDenyOrder = () => {
-    console.log("Denying order:", selectedOrder?.id);
-    setSelectedOrder(null);
   };
+
+  const handleDenyOrder = () => setSelectedOrder(null);
 
   const categories = [
     { id: "history", label: "Orders", icon: History },
@@ -226,7 +209,6 @@ export default function MenuDashboard() {
                 </Button>
               );
             })}
-
             <div className="pt-4 mt-4 border-t border-red-800">
               <Button
                 variant="ghost"
