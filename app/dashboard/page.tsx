@@ -102,9 +102,11 @@ export default function MenuDashboard() {
   }, [selectedCategory]);
 
   useEffect(() => {
-    if (selectedCategory === "history") fetchOrders();
-    else fetchUsers();
-  }, [selectedCategory]);
+  if (selectedCategory !== "history") {
+    fetchUsers();
+  }
+}, [selectedCategory]);
+
 
   const handleLogout = () => {
     localStorage.removeItem("token");
@@ -114,55 +116,27 @@ export default function MenuDashboard() {
   const handleManageOrder = (order: OrderItem) => setSelectedOrder(order);
 
   const handleProceedToCanteen = async () => {
-    if (!selectedOrder) return;
+  if (!selectedOrder) return;
 
-    // Update status locally first
-    setOrders((prev) =>
-      prev.map((o) =>
-        o.id === selectedOrder.id ? { ...o, status: "confirmed" } : o
-      )
-    );
+  try {
+    const res = await fetch(`${API_URL}/api/order/${selectedOrder.id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ status: "confirmed" }),
+    });
 
-    try {
-      const res = await fetch(`${API_URL}/api/order`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          items: selectedOrder.items.map((i) => ({
-            name: i.name,
-            price: i.price,
-            quantity: 1,
-          })),
-          total: selectedOrder.total,
-          orderCode: `CASH-${selectedOrder.id}-${Date.now()}`,
-          status: "confirmed",
-        }),
-      });
-      const result = await res.json();
-
-      if (res.ok) {
-        // Remove from frontend state after backend confirms
-        setOrders((prev) => prev.filter((o) => o.id !== selectedOrder.id));
-        setSelectedOrder(null);
-      } else {
-        console.error("Failed to send order", result);
-        // rollback status
-        setOrders((prev) =>
-          prev.map((o) =>
-            o.id === selectedOrder.id ? { ...o, status: "pending" } : o
-          )
-        );
-      }
-    } catch (err) {
-      console.error(err);
-      // rollback status
-      setOrders((prev) =>
-        prev.map((o) =>
-          o.id === selectedOrder.id ? { ...o, status: "pending" } : o
-        )
-      );
+    if (res.ok) {
+      // ✅ remove confirmed order from dashboard
+      setOrders((prev) => prev.filter((o) => o.id !== selectedOrder.id));
+      setSelectedOrder(null);
+    } else {
+      console.error("❌ Failed to confirm order", await res.json());
     }
-  };
+  } catch (err) {
+    console.error("❌ Error confirming order:", err);
+  }
+};
+
 
   const handleDenyOrder = () => setSelectedOrder(null);
 
