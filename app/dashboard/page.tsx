@@ -7,12 +7,28 @@ import { History, Users, LogOut } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { API_URL, WS_URL } from "../../config";
 
-interface OrderItem {
-  id: number;
-  items: { name: string; price: number; description?: string }[];
+// ✅ Full and corrected interface definitions
+interface OrderItemDetail {
+  id?: string;
+  name: string;
+  price: number;
+  quantity?: number;
+  description?: string;
+  notes?: string | null;
+  orderId?: string;
+}
+
+interface Order {
+  id: string;
+  orderCode?: string;
+  items: OrderItemDetail[];
   total: number;
   status: string;
-  orderDate: string;
+  orderDate?: string;
+  customerName?: string;
+  orderType?: string;
+  tableNumber?: string | null;
+  createdAt?: string;
 }
 
 interface User {
@@ -24,24 +40,20 @@ interface User {
 }
 
 export default function MenuDashboard() {
-  const [selectedCategory, setSelectedCategory] = useState<"history" | "users">(
-    "history"
-  );
-  const [orders, setOrders] = useState<OrderItem[]>([]);
+  const [selectedCategory, setSelectedCategory] = useState<"history" | "users">("history");
+  const [orders, setOrders] = useState<Order[]>([]);
   const [users, setUsers] = useState<User[]>([]);
   const [loading, setLoading] = useState(false);
-  const [selectedOrder, setSelectedOrder] = useState<OrderItem | null>(null);
+  const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
   const wsRef = useRef<WebSocket | null>(null);
   const router = useRouter();
 
-  // Fetch orders: only pending
+  // ✅ Fetch orders (pending only)
   const fetchOrders = async () => {
     setLoading(true);
     try {
       const res = await fetch(`${API_URL}/api/order`);
-      const data: OrderItem[] = await res.json();
-
-      // Only show pending orders
+      const data: Order[] = await res.json();
       const pendingOrders = data.filter((o) => o.status === "pending");
       setOrders(pendingOrders);
     } catch (err) {
@@ -64,7 +76,7 @@ export default function MenuDashboard() {
     }
   };
 
-  // WebSocket: only pending orders are displayed
+  // ✅ WebSocket: update orders in real time
   useEffect(() => {
     if (selectedCategory !== "history") return;
 
@@ -77,9 +89,7 @@ export default function MenuDashboard() {
 
         if (data.type === "init") {
           setOrders(
-            data.orders
-              .filter((o: OrderItem) => o.status === "pending")
-              .map((o: OrderItem) => ({ ...o }))
+            data.orders.filter((o: Order) => o.status === "pending")
           );
         } else if (data.type === "new_order") {
           if (data.order.status === "pending") {
@@ -89,7 +99,6 @@ export default function MenuDashboard() {
             });
           }
         } else if (data.type === "status_update") {
-          // Remove from cashier dashboard if status changes
           setOrders((prev) => prev.filter((o) => o.id !== data.order.id));
         } else if (data.type === "clear") setOrders([]);
       } catch (e) {
@@ -102,41 +111,40 @@ export default function MenuDashboard() {
   }, [selectedCategory]);
 
   useEffect(() => {
-  if (selectedCategory !== "history") {
-    fetchUsers();
-  }
-}, [selectedCategory]);
-
+    if (selectedCategory !== "history") {
+      fetchUsers();
+    } else {
+      fetchOrders();
+    }
+  }, [selectedCategory]);
 
   const handleLogout = () => {
     localStorage.removeItem("token");
     router.push("/login");
   };
 
-  const handleManageOrder = (order: OrderItem) => setSelectedOrder(order);
+  const handleManageOrder = (order: Order) => setSelectedOrder(order);
 
   const handleProceedToCanteen = async () => {
-  if (!selectedOrder) return;
+    if (!selectedOrder) return;
 
-  try {
-    const res = await fetch(`${API_URL}/api/order/${selectedOrder.id}`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ status: "confirmed" }),
-    });
+    try {
+      const res = await fetch(`${API_URL}/api/order/${selectedOrder.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status: "confirmed" }),
+      });
 
-    if (res.ok) {
-      // ✅ remove confirmed order from dashboard
-      setOrders((prev) => prev.filter((o) => o.id !== selectedOrder.id));
-      setSelectedOrder(null);
-    } else {
-      console.error("❌ Failed to confirm order", await res.json());
+      if (res.ok) {
+        setOrders((prev) => prev.filter((o) => o.id !== selectedOrder.id));
+        setSelectedOrder(null);
+      } else {
+        console.error("❌ Failed to confirm order", await res.json());
+      }
+    } catch (err) {
+      console.error("❌ Error confirming order:", err);
     }
-  } catch (err) {
-    console.error("❌ Error confirming order:", err);
-  }
-};
-
+  };
 
   const handleDenyOrder = () => setSelectedOrder(null);
 
@@ -168,9 +176,7 @@ export default function MenuDashboard() {
               return (
                 <Button
                   key={category.id}
-                  variant={
-                    selectedCategory === category.id ? "secondary" : "ghost"
-                  }
+                  variant={selectedCategory === category.id ? "secondary" : "ghost"}
                   className={`w-full justify-start text-left p-4 h-auto ${
                     selectedCategory === category.id
                       ? "bg-white text-red-900 hover:bg-gray-100"
@@ -198,6 +204,7 @@ export default function MenuDashboard() {
 
         {/* Main Content */}
         <div className="flex-1 p-8">
+          {/* Modal */}
           {selectedOrder && (
             <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
               <div className="bg-white rounded-lg p-6 max-w-md w-full mx-4">
@@ -206,9 +213,7 @@ export default function MenuDashboard() {
                   <h4 className="font-semibold">
                     {selectedOrder.items.map((i) => i.name).join(", ")}
                   </h4>
-                  <p className="text-red-900 font-bold">
-                    ₱{selectedOrder.total}
-                  </p>
+                  <p className="text-red-900 font-bold">₱{selectedOrder.total}</p>
                 </div>
                 <div className="flex gap-3">
                   <Button
@@ -236,6 +241,7 @@ export default function MenuDashboard() {
             </div>
           )}
 
+          {/* Orders / Users List */}
           <div className="mb-6">
             <h2 className="text-2xl font-bold text-gray-800">
               {selectedCategory === "history" ? "Order Management" : "Users"}
@@ -255,14 +261,12 @@ export default function MenuDashboard() {
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
               {selectedCategory === "history"
                 ? orders.map((order) => (
-                    <Card
-                      key={order.id}
-                      className="hover:shadow-lg transition-shadow duration-200"
-                    >
+                    <Card key={order.id} className="hover:shadow-lg transition-shadow duration-200">
                       <CardContent className="p-6">
                         <div className="flex justify-between items-start mb-3">
+                          {/* ✅ Display orderCode instead of long id */}
                           <h3 className="text-lg font-semibold text-gray-800">
-                            Order #{order.id}
+                            Order #{order.orderCode || order.id}
                           </h3>
                           <span className="text-lg font-bold text-red-900">
                             ₱{order.total}
@@ -273,7 +277,7 @@ export default function MenuDashboard() {
                             Status:{" "}
                             <span className="font-medium">{order.status}</span>
                           </p>
-                          <p>Date: {order.orderDate}</p>
+                          <p>Date: {order.orderDate || "N/A"}</p>
                         </div>
                         <div className="mt-4 space-y-1">
                           {order.items.map((item, idx) => (
@@ -292,10 +296,7 @@ export default function MenuDashboard() {
                     </Card>
                   ))
                 : users.map((user) => (
-                    <Card
-                      key={user.id}
-                      className="hover:shadow-lg transition-shadow duration-200"
-                    >
+                    <Card key={user.id} className="hover:shadow-lg transition-shadow duration-200">
                       <CardContent className="p-6">
                         <div className="mb-3">
                           <h3 className="text-lg font-semibold text-gray-800">
@@ -305,8 +306,7 @@ export default function MenuDashboard() {
                         </div>
                         <div className="text-xs text-gray-500 mb-3">
                           <p>
-                            Role:{" "}
-                            <span className="font-medium">{user.role}</span>
+                            Role: <span className="font-medium">{user.role}</span>
                           </p>
                           <p>Last Active: {user.lastActive}</p>
                         </div>

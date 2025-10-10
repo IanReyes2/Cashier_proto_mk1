@@ -2,5 +2,5 @@
 const hostname = typeof window !== "undefined" ? window.location.hostname : "localhost";
 
 export const API_URL = `http://${hostname}:3001`;
-export const WS_URL = `http://192.168.140.153:3001`; // localhost if testing locally
+export const WS_URL = `ws://192.168.254.124:3001`; // localhost if testing locally
 
