@@ -162,7 +162,7 @@ export default function MenuDashboard() {
             <div className="w-12 h-12 bg-white rounded-full flex items-center justify-center">
               <img src="/assets/SFAC_LOGO_Edited.png" />
             </div>
-            <h1 className="text-3xl font-bold">The FrancisCanteen</h1>
+            <h1 className="text-3xl font-bold">THE FRANCISCanteen</h1>
           </div>
         </div>
       </div>
