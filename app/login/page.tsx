@@ -1,7 +1,6 @@
 "use client"
 
 import type React from "react"
-
 import { useState } from "react"
 import { useRouter } from "next/navigation"
 import { useAuth } from "@/components/auth-provider"
@@ -50,7 +49,7 @@ export default function LoginPage() {
               <Input
                 id="email"
                 type="email"
-                placeholder="Enter your username"
+                placeholder="Example: JuanDelaCruz@gmail.com"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 required
@@ -62,7 +61,7 @@ export default function LoginPage() {
               <Input
                 id="password"
                 type="password"
-                placeholder="Enter your password"
+                placeholder="Your Account Password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 required
@@ -78,15 +77,6 @@ export default function LoginPage() {
               {isLoading ? "Signing in..." : "Sign In"}
             </Button>
           </form>
-          <div className="mt-6 text-sm text-muted-foreground">
-            <p className="text-center">USE THIS:</p>
-            <div className="mt-2 space-y-1 text-xs">
-              <p>
-                Admin: username: <code className="bg-muted px-1 rounded">JuanDelaCruz</code>, password:{" "}
-                <code className="bg-muted px-1 rounded">admin123</code>
-              </p>
-            </div>
-          </div>
         </CardContent>
       </Card>
     </div>

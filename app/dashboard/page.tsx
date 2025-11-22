@@ -40,7 +40,9 @@ interface User {
 }
 
 export default function MenuDashboard() {
-  const [selectedCategory, setSelectedCategory] = useState<"history" | "users">("history");
+  const [selectedCategory, setSelectedCategory] = useState<"history" | "users">(
+    "history"
+  );
   const [orders, setOrders] = useState<Order[]>([]);
   const [users, setUsers] = useState<User[]>([]);
   const [loading, setLoading] = useState(false);
@@ -88,9 +90,7 @@ export default function MenuDashboard() {
         const data = JSON.parse(event.data);
 
         if (data.type === "init") {
-          setOrders(
-            data.orders.filter((o: Order) => o.status === "pending")
-          );
+          setOrders(data.orders.filter((o: Order) => o.status === "pending"));
         } else if (data.type === "new_order") {
           if (data.order.status === "pending") {
             setOrders((prev) => {
@@ -176,7 +176,9 @@ export default function MenuDashboard() {
               return (
                 <Button
                   key={category.id}
-                  variant={selectedCategory === category.id ? "secondary" : "ghost"}
+                  variant={
+                    selectedCategory === category.id ? "secondary" : "ghost"
+                  }
                   className={`w-full justify-start text-left p-4 h-auto ${
                     selectedCategory === category.id
                       ? "bg-white text-red-900 hover:bg-gray-100"
@@ -199,6 +201,20 @@ export default function MenuDashboard() {
                 <span className="text-lg font-medium">Logout</span>
               </Button>
             </div>
+            <div>
+              <button
+                onClick={() => {
+                  // Use your backend IP:port
+                  window.open(
+                    "http://192.168.1.11:3001/api/export/orders",
+                    "_blank"
+                  );
+                }}
+                className=" bg-red-900 hover:bg-red-800 text-white px-4 py-2 rounded"
+              >
+                Download Orders CSV
+              </button>
+            </div>
           </nav>
         </div>
 
@@ -213,7 +229,9 @@ export default function MenuDashboard() {
                   <h4 className="font-semibold">
                     {selectedOrder.items.map((i) => i.name).join(", ")}
                   </h4>
-                  <p className="text-red-900 font-bold">₱{selectedOrder.total}</p>
+                  <p className="text-red-900 font-bold">
+                    ₱{selectedOrder.total}
+                  </p>
                 </div>
                 <div className="flex gap-3">
                   <Button
@@ -261,7 +279,10 @@ export default function MenuDashboard() {
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
               {selectedCategory === "history"
                 ? orders.map((order) => (
-                    <Card key={order.id} className="hover:shadow-lg transition-shadow duration-200">
+                    <Card
+                      key={order.id}
+                      className="hover:shadow-lg transition-shadow duration-200"
+                    >
                       <CardContent className="p-6">
                         <div className="flex justify-between items-start mb-3">
                           {/* ✅ Display orderCode instead of long id */}
@@ -296,7 +317,10 @@ export default function MenuDashboard() {
                     </Card>
                   ))
                 : users.map((user) => (
-                    <Card key={user.id} className="hover:shadow-lg transition-shadow duration-200">
+                    <Card
+                      key={user.id}
+                      className="hover:shadow-lg transition-shadow duration-200"
+                    >
                       <CardContent className="p-6">
                         <div className="mb-3">
                           <h3 className="text-lg font-semibold text-gray-800">
@@ -306,7 +330,8 @@ export default function MenuDashboard() {
                         </div>
                         <div className="text-xs text-gray-500 mb-3">
                           <p>
-                            Role: <span className="font-medium">{user.role}</span>
+                            Role:{" "}
+                            <span className="font-medium">{user.role}</span>
                           </p>
                           <p>Last Active: {user.lastActive}</p>
                         </div>
