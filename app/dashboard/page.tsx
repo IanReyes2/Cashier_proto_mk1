@@ -7,7 +7,9 @@ import { History, Users, LogOut } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { API_URL, WS_URL } from "../../config";
 
-// ✅ Full and corrected interface definitions
+// --------------------
+// Interfaces
+// --------------------
 interface OrderItemDetail {
   id?: string;
   name: string;
@@ -21,7 +23,7 @@ interface OrderItemDetail {
 interface Order {
   id: string;
   orderCode?: string;
-  items: OrderItemDetail[];
+  items: OrderItemDetail[]; // Always an array
   total: number;
   status: string;
   orderDate?: string;
@@ -40,9 +42,7 @@ interface User {
 }
 
 export default function MenuDashboard() {
-  const [selectedCategory, setSelectedCategory] = useState<"history" | "users">(
-    "history"
-  );
+  const [selectedCategory, setSelectedCategory] = useState<"history" | "users">("history");
   const [orders, setOrders] = useState<Order[]>([]);
   const [users, setUsers] = useState<User[]>([]);
   const [loading, setLoading] = useState(false);
@@ -50,35 +50,54 @@ export default function MenuDashboard() {
   const wsRef = useRef<WebSocket | null>(null);
   const router = useRouter();
 
-  // ✅ Fetch orders (pending only)
+  // --------------------
+  // Fetch Orders
+  // --------------------
   const fetchOrders = async () => {
     setLoading(true);
     try {
       const res = await fetch(`${API_URL}/api/order`);
-      const data: Order[] = await res.json();
-      const pendingOrders = data.filter((o) => o.status === "pending");
-      setOrders(pendingOrders);
+      const jsonData = await res.json();
+
+      // Ensure data is always an array
+      const data: Order[] = Array.isArray(jsonData) ? jsonData : [];
+
+      // Map backend's 'orderitem' to 'items' if needed
+      const normalizedOrders = data.map((o) => ({
+        ...o,
+        items: o.items || [], // fallback to empty array
+      }));
+
+      // Set only pending orders
+      setOrders(normalizedOrders.filter((o) => o.status === "pending"));
     } catch (err) {
       console.error("Failed to fetch orders:", err);
+      setOrders([]);
     } finally {
       setLoading(false);
     }
   };
 
+  // --------------------
+  // Fetch Users
+  // --------------------
   const fetchUsers = async () => {
     setLoading(true);
     try {
       const res = await fetch("/api/users");
       const data: User[] = await res.json();
-      setUsers(data);
+      setUsers(Array.isArray(data) ? data : []);
     } catch (err) {
       console.error("Failed to fetch users:", err);
+      setUsers([]);
     } finally {
       setLoading(false);
     }
   };
 
-  // ✅ WebSocket: update orders in real time
+  // --------------------
+  // WebSocket for real-time updates
+  // --------------------
   useEffect(() => {
     if (selectedCategory !== "history") return;
 
@@ -90,12 +109,15 @@ export default function MenuDashboard() {
         const data = JSON.parse(event.data);
 
         if (data.type === "init") {
-          setOrders(data.orders.filter((o: Order) => o.status === "pending"));
+          const normalizedOrders = (Array.isArray(data.orders) ? data.orders : []).map(
+            (o: Order) => ({ ...o, items: o.items || [] })
+          );
+setOrders(normalizedOrders.filter((o: Order) => o.status === "pending"));
         } else if (data.type === "new_order") {
           if (data.order.status === "pending") {
             setOrders((prev) => {
               if (prev.find((o) => o.id === data.order.id)) return prev;
-              return [...prev, data.order];
+              return [...prev, { ...data.order, items: data.order.items || [] }];
             });
           }
         } else if (data.type === "status_update") {
@@ -110,14 +132,17 @@ export default function MenuDashboard() {
     return () => wsRef.current?.close();
   }, [selectedCategory]);
 
+  // --------------------
+  // Initial fetch
+  // --------------------
   useEffect(() => {
-    if (selectedCategory !== "history") {
-      fetchUsers();
-    } else {
-      fetchOrders();
-    }
+    if (selectedCategory === "history") fetchOrders();
+    else fetchUsers();
   }, [selectedCategory]);
 
+  // --------------------
+  // Actions
+  // --------------------
   const handleLogout = () => {
     localStorage.removeItem("token");
     router.push("/login");
@@ -125,34 +150,47 @@ export default function MenuDashboard() {
 
   const handleManageOrder = (order: Order) => setSelectedOrder(order);
 
-  const handleProceedToCanteen = async () => {
-    if (!selectedOrder) return;
+ const handleProceedToCanteen = async () => {
+  if (!selectedOrder) return;
+  try {
+    const res = await fetch(`${API_URL}/api/order/${selectedOrder.id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ status: "confirmed" }),
+    });
 
-    try {
-      const res = await fetch(`${API_URL}/api/order/${selectedOrder.id}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ status: "confirmed" }),
-      });
-
-      if (res.ok) {
-        setOrders((prev) => prev.filter((o) => o.id !== selectedOrder.id));
-        setSelectedOrder(null);
-      } else {
-        console.error("❌ Failed to confirm order", await res.json());
+    if (res.ok) {
+      setOrders((prev: Order[]) => prev.filter((o) => o.id !== selectedOrder.id));
+      setSelectedOrder(null);
+    } else {
+      // explicitly type errorBody as unknown
+      let errorBody: unknown;
+      try {
+        errorBody = await res.json();
+      } catch {
+        errorBody = await res.text();
       }
-    } catch (err) {
-      console.error("❌ Error confirming order:", err);
+      console.error("❌ Failed to confirm order:", errorBody);
     }
-  };
+  } catch (err) {
+    console.error("❌ Error confirming order:", err);
+  }
+};
 
   const handleDenyOrder = () => setSelectedOrder(null);
 
+
+  // --------------------
+  // Categories
+  // --------------------
   const categories = [
     { id: "history", label: "Orders", icon: History },
     { id: "users", label: "Users", icon: Users },
   ] as const;
 
+  // --------------------
+  // Render
+  // --------------------
   return (
     <div className="min-h-screen bg-gray-50">
       {/* Header */}
@@ -176,9 +214,7 @@ export default function MenuDashboard() {
               return (
                 <Button
                   key={category.id}
-                  variant={
-                    selectedCategory === category.id ? "secondary" : "ghost"
-                  }
+                  variant={selectedCategory === category.id ? "secondary" : "ghost"}
                   className={`w-full justify-start text-left p-4 h-auto ${
                     selectedCategory === category.id
                       ? "bg-white text-red-900 hover:bg-gray-100"
@@ -191,7 +227,21 @@ export default function MenuDashboard() {
                 </Button>
               );
             })}
-            <div className="pt-4 mt-4 border-t border-red-800">
+
+            {/* Actions Section */}
+            <div className="pt-4 mt-4 border-t border-red-800 space-y-2">
+
+              <div>
+                <button
+                  onClick={() => {
+                    window.open(`${API_URL}/api/export/orders`, "_blank");
+                  }}
+                  className=" bg-red-900 hover:bg-red-800 text-white px-4 py-2 rounded"
+                >
+                  Download Orders CSV
+                </button>
+              </div>
+
               <Button
                 variant="ghost"
                 className="w-full justify-start text-left p-4 h-auto text-white hover:bg-red-800"
@@ -200,20 +250,6 @@ export default function MenuDashboard() {
                 <LogOut className="w-5 h-5 mr-3" />
                 <span className="text-lg font-medium">Logout</span>
               </Button>
-            </div>
-            <div>
-              <button
-                onClick={() => {
-                  // Use your backend IP:port
-                  window.open(
-                    "http://192.168.1.11:3001/api/export/orders",
-                    "_blank"
-                  );
-                }}
-                className=" bg-red-900 hover:bg-red-800 text-white px-4 py-2 rounded"
-              >
-                Download Orders CSV
-              </button>
             </div>
           </nav>
         </div>
@@ -229,9 +265,7 @@ export default function MenuDashboard() {
                   <h4 className="font-semibold">
                     {selectedOrder.items.map((i) => i.name).join(", ")}
                   </h4>
-                  <p className="text-red-900 font-bold">
-                    ₱{selectedOrder.total}
-                  </p>
+                  <p className="text-red-900 font-bold">₱{selectedOrder.total}</p>
                 </div>
                 <div className="flex gap-3">
                   <Button
@@ -285,7 +319,6 @@ export default function MenuDashboard() {
                     >
                       <CardContent className="p-6">
                         <div className="flex justify-between items-start mb-3">
-                          {/* ✅ Display orderCode instead of long id */}
                           <h3 className="text-lg font-semibold text-gray-800">
                             Order #{order.orderCode || order.id}
                           </h3>
@@ -295,13 +328,12 @@ export default function MenuDashboard() {
                         </div>
                         <div className="text-xs text-gray-500 mb-3">
                           <p>
-                            Status:{" "}
-                            <span className="font-medium">{order.status}</span>
+                            Status: <span className="font-medium">{order.status}</span>
                           </p>
                           <p>Date: {order.orderDate || "N/A"}</p>
                         </div>
                         <div className="mt-4 space-y-1">
-                          {order.items.map((item, idx) => (
+                          {order.items?.map((item, idx) => (
                             <p key={idx} className="text-sm text-gray-700">
                               • {item.name} — ₱{item.price}
                             </p>
@@ -330,8 +362,7 @@ export default function MenuDashboard() {
                         </div>
                         <div className="text-xs text-gray-500 mb-3">
                           <p>
-                            Role:{" "}
-                            <span className="font-medium">{user.role}</span>
+                            Role: <span className="font-medium">{user.role}</span>
                           </p>
                           <p>Last Active: {user.lastActive}</p>
                         </div>
@@ -348,9 +379,7 @@ export default function MenuDashboard() {
             ((selectedCategory === "history" && orders.length === 0) ||
               (selectedCategory === "users" && users.length === 0)) && (
               <div className="text-center py-12">
-                <p className="text-gray-500">
-                  No {selectedCategory} data available
-                </p>
+                <p className="text-gray-500">No {selectedCategory} data available</p>
               </div>
             )}
         </div>
