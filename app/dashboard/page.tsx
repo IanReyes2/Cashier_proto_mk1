@@ -3,9 +3,10 @@
 import { useState, useEffect, useRef } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { History, Users, LogOut } from "lucide-react";
+import { History, Users, LogOut, UtensilsCrossed } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { API_URL, WS_URL } from "../../config";
+import { getCurrentUser, User } from "@/lib/auth";
 
 // --------------------
 // Interfaces
@@ -23,7 +24,7 @@ interface OrderItemDetail {
 interface Order {
   id: string;
   orderCode?: string;
-  items: OrderItemDetail[]; // Always an array
+  items: OrderItemDetail[];
   total: number;
   status: string;
   orderDate?: string;
@@ -33,22 +34,55 @@ interface Order {
   createdAt?: string;
 }
 
-interface User {
+interface MenuItem {
   id: number;
   name: string;
-  email: string;
-  role: string;
-  lastActive: string;
+  price: number;
+  available: boolean;
+  category?: string;
+  availabilities?: { dayOfWeek: string }[];
 }
 
+// --------------------
+// Kiosk API URL
+// --------------------
+const KIOSK_URL = "http://localhost:3000"; // Replace with your kiosk frontend URL
+const DAYS = [
+  "monday",
+  "tuesday",
+  "wednesday",
+  "thursday",
+  "friday",
+  "saturday",
+  "sunday",
+];
+
 export default function MenuDashboard() {
-  const [selectedCategory, setSelectedCategory] = useState<"history" | "users">("history");
+  const [selectedCategory, setSelectedCategory] = useState<"history" | "menu">(
+    "history"
+  );
+  const [user, setUser] = useState<User | null | undefined>(undefined);
   const [orders, setOrders] = useState<Order[]>([]);
-  const [users, setUsers] = useState<User[]>([]);
+  const [menuItems, setMenuItems] = useState<MenuItem[]>([]);
   const [loading, setLoading] = useState(false);
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
+  const [editingItem, setEditingItem] = useState<MenuItem | null>(null);
+  const [selectedDays, setSelectedDays] = useState<string[]>([]);
+
   const wsRef = useRef<WebSocket | null>(null);
   const router = useRouter();
+
+  // --------------------
+  // Auth Guard
+  // --------------------
+  useEffect(() => {
+    const storedUser = getCurrentUser();
+    if (!storedUser) {
+      router.push("/login");
+    } else {
+      setUser(storedUser);
+    }
+  }, [router]);
 
   // --------------------
   // Fetch Orders
@@ -58,17 +92,11 @@ export default function MenuDashboard() {
     try {
       const res = await fetch(`${API_URL}/api/order`);
       const jsonData = await res.json();
-
-      // Ensure data is always an array
       const data: Order[] = Array.isArray(jsonData) ? jsonData : [];
-
-      // Map backend's 'orderitem' to 'items' if needed
       const normalizedOrders = data.map((o) => ({
         ...o,
-        items: o.items || [], // fallback to empty array
+        items: o.items || [],
       }));
-
-      // Set only pending orders
       setOrders(normalizedOrders.filter((o) => o.status === "pending"));
     } catch (err) {
       console.error("Failed to fetch orders:", err);
@@ -79,17 +107,18 @@ export default function MenuDashboard() {
   };
 
   // --------------------
-  // Fetch Users
+  // Fetch Menu Items
   // --------------------
-  const fetchUsers = async () => {
+  const fetchMenuItems = async () => {
     setLoading(true);
     try {
-      const res = await fetch("/api/users");
-      const data: User[] = await res.json();
-      setUsers(Array.isArray(data) ? data : []);
+      const res = await fetch("/api/kiosk-menu");
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const data = await res.json();
+      setMenuItems(Array.isArray(data) ? data : []);
     } catch (err) {
-      console.error("Failed to fetch users:", err);
-      setUsers([]);
+      console.error("Failed to fetch menu items:", err);
+      setMenuItems([]);
     } finally {
       setLoading(false);
     }
@@ -109,15 +138,20 @@ export default function MenuDashboard() {
         const data = JSON.parse(event.data);
 
         if (data.type === "init") {
-          const normalizedOrders = (Array.isArray(data.orders) ? data.orders : []).map(
-            (o: Order) => ({ ...o, items: o.items || [] })
+          const normalizedOrders = (
+            Array.isArray(data.orders) ? data.orders : []
+          ).map((o: Order) => ({ ...o, items: o.items || [] }));
+          setOrders(
+            normalizedOrders.filter((o: Order) => o.status === "pending")
           );
-setOrders(normalizedOrders.filter((o: Order) => o.status === "pending"));
         } else if (data.type === "new_order") {
           if (data.order.status === "pending") {
             setOrders((prev) => {
               if (prev.find((o) => o.id === data.order.id)) return prev;
-              return [...prev, { ...data.order, items: data.order.items || [] }];
+              return [
+                ...prev,
+                { ...data.order, items: data.order.items || [] },
+              ];
             });
           }
         } else if (data.type === "status_update") {
@@ -137,7 +171,7 @@ setOrders(normalizedOrders.filter((o: Order) => o.status === "pending"));
   // --------------------
   useEffect(() => {
     if (selectedCategory === "history") fetchOrders();
-    else fetchUsers();
+    else fetchMenuItems();
   }, [selectedCategory]);
 
   // --------------------
@@ -150,42 +184,72 @@ setOrders(normalizedOrders.filter((o: Order) => o.status === "pending"));
 
   const handleManageOrder = (order: Order) => setSelectedOrder(order);
 
- const handleProceedToCanteen = async () => {
-  if (!selectedOrder) return;
-  try {
-    const res = await fetch(`${API_URL}/api/order/${selectedOrder.id}`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ status: "confirmed" }),
-    });
+  const handleProceedToCanteen = async () => {
+    if (!selectedOrder) return;
+    try {
+      const res = await fetch(`${API_URL}/api/order/${selectedOrder.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status: "confirmed" }),
+      });
 
-    if (res.ok) {
-      setOrders((prev: Order[]) => prev.filter((o) => o.id !== selectedOrder.id));
-      setSelectedOrder(null);
-    } else {
-      // explicitly type errorBody as unknown
-      let errorBody: unknown;
-      try {
-        errorBody = await res.json();
-      } catch {
-        errorBody = await res.text();
+      if (res.ok) {
+        setOrders((prev: Order[]) =>
+          prev.filter((o) => o.id !== selectedOrder.id)
+        );
+        setSelectedOrder(null);
+      } else {
+        let errorBody: unknown;
+        try {
+          errorBody = await res.json();
+        } catch {
+          errorBody = await res.text();
+        }
+        console.error("❌ Failed to confirm order:", errorBody);
       }
-      console.error("❌ Failed to confirm order:", errorBody);
+    } catch (err) {
+      console.error("❌ Error confirming order:", err);
     }
-  } catch (err) {
-    console.error("❌ Error confirming order:", err);
-  }
-};
+  };
 
   const handleDenyOrder = () => setSelectedOrder(null);
 
+  const openMenuModal = (item: MenuItem) => {
+    setEditingItem(item);
+    setSelectedDays(
+      item.availabilities?.map((a) => a.dayOfWeek.toLowerCase()) || []
+    );
+  };
+
+  const handleSaveAvailability = async () => {
+    if (!editingItem) return;
+
+    await fetch("/api/kiosk-menu", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        id: editingItem.id,
+        days: selectedDays,
+      }),
+    });
+
+    fetchMenuItems();
+    setEditingItem(null);
+    setSelectedDays([]);
+  };
+
+  const toggleDay = (day: string) => {
+    setSelectedDays((prev) =>
+      prev.includes(day) ? prev.filter((d) => d !== day) : [...prev, day]
+    );
+  };
 
   // --------------------
   // Categories
   // --------------------
   const categories = [
     { id: "history", label: "Orders", icon: History },
-    { id: "users", label: "Users", icon: Users },
+    { id: "menu", label: "Menu Maker", icon: UtensilsCrossed },
   ] as const;
 
   // --------------------
@@ -214,7 +278,9 @@ setOrders(normalizedOrders.filter((o: Order) => o.status === "pending"));
               return (
                 <Button
                   key={category.id}
-                  variant={selectedCategory === category.id ? "secondary" : "ghost"}
+                  variant={
+                    selectedCategory === category.id ? "secondary" : "ghost"
+                  }
                   className={`w-full justify-start text-left p-4 h-auto ${
                     selectedCategory === category.id
                       ? "bg-white text-red-900 hover:bg-gray-100"
@@ -230,12 +296,11 @@ setOrders(normalizedOrders.filter((o: Order) => o.status === "pending"));
 
             {/* Actions Section */}
             <div className="pt-4 mt-4 border-t border-red-800 space-y-2">
-
               <div>
                 <button
-                  onClick={() => {
-                    window.open(`${API_URL}/api/export/orders`, "_blank");
-                  }}
+                  onClick={() =>
+                    window.open(`${API_URL}/api/export/orders`, "_blank")
+                  }
                   className=" bg-red-900 hover:bg-red-800 text-white px-4 py-2 rounded"
                 >
                   Download Orders CSV
@@ -256,7 +321,7 @@ setOrders(normalizedOrders.filter((o: Order) => o.status === "pending"));
 
         {/* Main Content */}
         <div className="flex-1 p-8">
-          {/* Modal */}
+          {/* Order Modal */}
           {selectedOrder && (
             <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
               <div className="bg-white rounded-lg p-6 max-w-md w-full mx-4">
@@ -265,7 +330,9 @@ setOrders(normalizedOrders.filter((o: Order) => o.status === "pending"));
                   <h4 className="font-semibold">
                     {selectedOrder.items.map((i) => i.name).join(", ")}
                   </h4>
-                  <p className="text-red-900 font-bold">₱{selectedOrder.total}</p>
+                  <p className="text-red-900 font-bold">
+                    ₱{selectedOrder.total}
+                  </p>
                 </div>
                 <div className="flex gap-3">
                   <Button
@@ -293,15 +360,55 @@ setOrders(normalizedOrders.filter((o: Order) => o.status === "pending"));
             </div>
           )}
 
-          {/* Orders / Users List */}
+          {/* Menu Maker Modal */}
+          {editingItem && (
+            <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+              <div className="bg-white rounded-lg p-6 max-w-md w-full">
+                <h3 className="text-xl font-bold mb-4">
+                  {editingItem.name} Availability
+                </h3>
+                <div className="grid grid-cols-3 gap-2 mb-4">
+                  {DAYS.map((day) => (
+                    <button
+                      key={day}
+                      className={`py-2 px-3 rounded border ${
+                        selectedDays.includes(day)
+                          ? "bg-green-600 text-white"
+                          : "bg-gray-100 text-gray-700"
+                      }`}
+                      onClick={() => toggleDay(day)}
+                    >
+                      {day.slice(0, 3)}
+                    </button>
+                  ))}
+                </div>
+                <div className="flex gap-2">
+                  <Button onClick={handleSaveAvailability} className="flex-1">
+                    Save
+                  </Button>
+                  <Button
+                    onClick={() => setEditingItem(null)}
+                    variant="destructive"
+                    className="flex-1"
+                  >
+                    Cancel
+                  </Button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Orders / Menu List */}
           <div className="mb-6">
             <h2 className="text-2xl font-bold text-gray-800">
-              {selectedCategory === "history" ? "Order Management" : "Users"}
+              {selectedCategory === "history"
+                ? "Order Management"
+                : "Menu Maker"}
             </h2>
             <p className="text-gray-600 mt-1">
               {selectedCategory === "history"
                 ? "View order history and manage orders"
-                : "Manage system users"}
+                : "Edit menu item availability"}
             </p>
           </div>
 
@@ -328,7 +435,8 @@ setOrders(normalizedOrders.filter((o: Order) => o.status === "pending"));
                         </div>
                         <div className="text-xs text-gray-500 mb-3">
                           <p>
-                            Status: <span className="font-medium">{order.status}</span>
+                            Status:{" "}
+                            <span className="font-medium">{order.status}</span>
                           </p>
                           <p>Date: {order.orderDate || "N/A"}</p>
                         </div>
@@ -348,26 +456,59 @@ setOrders(normalizedOrders.filter((o: Order) => o.status === "pending"));
                       </CardContent>
                     </Card>
                   ))
-                : users.map((user) => (
-                    <Card
-                      key={user.id}
-                      className="hover:shadow-lg transition-shadow duration-200"
-                    >
+                : menuItems.map((item) => (
+                    <Card key={item.id} className="hover:shadow-lg">
                       <CardContent className="p-6">
-                        <div className="mb-3">
+                        <div className="flex justify-between items-start mb-2">
                           <h3 className="text-lg font-semibold text-gray-800">
-                            {user.name}
+                            {item.name}
                           </h3>
-                          <p className="text-gray-600 text-sm">{user.email}</p>
+                          <span className="font-bold text-red-900">
+                            ₱{item.price}
+                          </span>
                         </div>
-                        <div className="text-xs text-gray-500 mb-3">
-                          <p>
-                            Role: <span className="font-medium">{user.role}</span>
-                          </p>
-                          <p>Last Active: {user.lastActive}</p>
+                        <p className="text-sm text-gray-600 mb-2">
+                          Category: {item.category ?? "Uncategorized"}
+                        </p>
+                        <p
+                          className={`text-sm font-medium mb-3 ${
+                            item.available ? "text-green-600" : "text-red-600"
+                          }`}
+                        >
+                          {item.available ? "Available" : "Unavailable"}
+                        </p>
+                        <div className="text-xs text-gray-500 mb-4">
+                          Available on:{" "}
+                          {item.availabilities && item.availabilities.length > 0
+                            ? item.availabilities
+                                .map((d) => d.dayOfWeek)
+                                .join(", ")
+                            : "None"}
                         </div>
-                        <Button className="w-full bg-red-900 hover:bg-red-800 text-white">
-                          Manage User
+                        <Button
+                          className="w-full mb-2"
+                          variant="outline"
+                          onClick={() => openMenuModal(item)}
+                        >
+                          Edit Availability
+                        </Button>
+                        <Button
+                          className="w-full"
+                          variant={item.available ? "destructive" : "default"}
+                          onClick={async () => {
+                            await fetch("/api/kiosk-menu", {
+                              method: "PATCH",
+                              headers: { "Content-Type": "application/json" },
+                              body: JSON.stringify({
+                                id: item.id,
+                                available: !item.available,
+                              }),
+                            });
+
+                            fetchMenuItems();
+                          }}
+                        >
+                          {item.available ? "Disable Item" : "Enable Item"}
                         </Button>
                       </CardContent>
                     </Card>
@@ -377,9 +518,11 @@ setOrders(normalizedOrders.filter((o: Order) => o.status === "pending"));
 
           {!loading &&
             ((selectedCategory === "history" && orders.length === 0) ||
-              (selectedCategory === "users" && users.length === 0)) && (
+              (selectedCategory === "menu" && menuItems.length === 0)) && (
               <div className="text-center py-12">
-                <p className="text-gray-500">No {selectedCategory} data available</p>
+                <p className="text-gray-500">
+                  No {selectedCategory} data available
+                </p>
               </div>
             )}
         </div>

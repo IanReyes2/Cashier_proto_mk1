@@ -1,6 +1,3 @@
-// This is your Prisma schema file,
-// learn more about it in the docs: https://pris.ly/d/prisma-schema
-
 generator client {
   provider = "prisma-client-js"
 }
@@ -13,91 +10,59 @@ datasource db {
 model User {
   id        String   @id @default(cuid())
   email     String   @unique
-  name      String
   password  String
+  name      String?
+  role      Role     @default(CASHIER)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
-
-  // Relations
-  transactions Transaction[]
 
   @@map("users")
 }
 
-model Customer {
-  id        String   @id @default(cuid())
-  name      String
-  email     String?  @unique
-  password  String
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  // Relations
-  transactions Transaction[]
-
-  @@map("customers")
+enum Role {
+  ADMIN
+  CASHIER
 }
 
-model Product {
-  id          String   @id @default(cuid())
-  name        String
-  description String?
-  price       Decimal  @db.Decimal(10, 2)
-  stock       Int      @default(0)
-  category    String?
-  barcode     String?  @unique
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-
-  // Relations
-  transactionItems TransactionItem[]
-
-  @@map("products")
+model menuitem {
+  id                   Int                    @id @default(autoincrement())
+  name                 String
+  price                Float
+  available            Boolean                @default(true)
+  category             String?                @default("uncategorized")
+  menuitemavailability menuitemavailability[]
+  orderitem            orderitem[]
 }
 
-model Transaction {
-  id          String            @id @default(cuid())
-  total       Decimal           @db.Decimal(10, 2)
-  subtotal    Decimal           @db.Decimal(10, 2)
-  tax         Decimal           @db.Decimal(10, 2) @default(0)
-  discount    Decimal           @db.Decimal(10, 2) @default(0)
-  status      TransactionStatus @default(COMPLETED)
-  paymentMethod String          @default("cash")
-  createdAt   DateTime          @default(now())
-  updatedAt   DateTime          @updatedAt
+model menuitemavailability {
+  id         Int      @id @default(autoincrement())
+  dayOfWeek  String
+  menuItemId Int
+  menuitem   menuitem @relation(fields: [menuItemId], references: [id])
 
-  // Foreign Keys
-  userId     String
-  customerId String?
-
-  // Relations
-  user     User                @relation(fields: [userId], references: [id])
-  customer Customer?           @relation(fields: [customerId], references: [id])
-  items    TransactionItem[]
-
-  @@map("transactions")
+  @@index([menuItemId], map: "menuitemavailability_menuItemId_fkey")
 }
 
-model TransactionItem {
-  id       String  @id @default(cuid())
-  quantity Int
-  price    Decimal @db.Decimal(10, 2)
-  subtotal Decimal @db.Decimal(10, 2)
-
-  // Foreign Keys
-  transactionId String
-  productId     String
-
-  // Relations
-  transaction Transaction @relation(fields: [transactionId], references: [id], onDelete: Cascade)
-  product     Product     @relation(fields: [productId], references: [id])
-
-  @@map("transaction_items")
+model order {
+  id           Int         @id @default(autoincrement())
+  customerCode String      @unique
+  status       String      @default("PENDING")
+  total        Float       @default(0)
+  createdAt    DateTime    @default(now())
+  updatedAt    DateTime
+  orderitem    orderitem[]
 }
 
-enum TransactionStatus {
-  PENDING
-  COMPLETED
-  CANCELLED
-  REFUNDED
+model orderitem {
+  id         Int      @id @default(autoincrement())
+  orderId    Int
+  menuItemId Int
+  qty        Int
+  unitPrice  Float
+  createdAt  DateTime @default(now())
+  menuitem   menuitem @relation(fields: [menuItemId], references: [id])
+  order      order    @relation(fields: [orderId], references: [id])
+
+  @@index([menuItemId], map: "orderitem_menuItemId_fkey")
+  @@index([orderId], map: "orderitem_orderId_fkey")
 }

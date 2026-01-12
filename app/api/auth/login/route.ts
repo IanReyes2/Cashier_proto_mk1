@@ -1,59 +1,50 @@
-import { type NextRequest, NextResponse } from "next/server";
-import { prisma } from "@/lib/prisma";
-import jwt from "jsonwebtoken";
+import { NextRequest, NextResponse } from "next/server"
+import { prisma } from "@/lib/prisma"
+import jwt from "jsonwebtoken"
 
-export async function POST(request: NextRequest) {
+export async function POST(req: NextRequest) {
   try {
-    const { email, password } = await request.json();
+    const { email, password } = await req.json()
 
     if (!email || !password) {
       return NextResponse.json(
-        { error: "Email and password are required" },
+        { error: "Email and password required" },
         { status: 400 }
-      );
+      )
     }
 
-    // Find customer by email
-    const Customer = await prisma.customer.findUnique({
+    const user = await prisma.user.findUnique({
       where: { email },
-    });
+    })
 
-    console.log("Login attempt:", { email, Customer });
-
-    if (!Customer) {
+    if (!user || user.password !== password) {
       return NextResponse.json(
         { error: "Invalid credentials" },
         { status: 401 }
-      );
+      )
     }
 
-    // Simple password check (no hashing)
-    if (Customer.password !== password) {
-      return NextResponse.json(
-        { error: "Invalid credentials" },
-        { status: 401 }
-      );
+    if (!process.env.JWT_SECRET) {
+      throw new Error("JWT_SECRET missing")
     }
 
-    // Generate JWT token
     const token = jwt.sign(
-      { userId: Customer.id, email: Customer.email },
-      process.env.JWT_SECRET || "fallback-secret",
-      { expiresIn: "24h" }
-    );
+      { userId: user.id },
+      process.env.JWT_SECRET,
+      { expiresIn: "1d" }
+    )
 
-    // Remove password from customer object
-    const { password: _, ...customerWithoutPassword } = Customer;
+    const { password: _, ...safeUser } = user
 
     return NextResponse.json({
-      user: customerWithoutPassword,
+      user: safeUser,
       token,
-    });
-  } catch (error) {
-    console.error("Login error:", error);
+    })
+  } catch (err) {
+    console.error(err)
     return NextResponse.json(
       { error: "Internal server error" },
       { status: 500 }
-    );
+    )
   }
 }
