@@ -7,20 +7,23 @@ export interface User {
 
 export const AUTH_STORAGE_KEY = "cashier_auth"
 
-export function login(username: string, password: string): User | null {
-  // Simple hardcoded authentication for demo
+export function login(username: string, password: string): User {
   const users = [
-    { id: "1", username: "cashier", password: "password", role: "cashier" as const },
+    { id: "1", username: "cashier", password: "cashier", role: "cashier" as const },
     { id: "2", username: "admin", password: "admin123", role: "admin" as const },
   ]
 
-  const user = users.find((u) => u.username === username && u.password === password)
-  if (user) {
-    const authUser = { id: user.id, username: user.username, role: user.role }
-    localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(authUser))
-    return authUser
+  const user = users.find(
+    (u) => u.username === username && u.password === password
+  )
+
+  if (!user) {
+    throw new Error("Invalid credentials")
   }
-  return null
+
+  const authUser = { id: user.id, username: user.username, role: user.role }
+  localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(authUser))
+  return authUser
 }
 
 export function logout(): void {

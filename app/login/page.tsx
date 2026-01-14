@@ -6,7 +6,7 @@ import { login } from "@/lib/auth";
 
 export default function LoginPage() {
   const router = useRouter();
-  const [email, setEmail] = useState("");
+  const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
@@ -18,8 +18,8 @@ export default function LoginPage() {
 
     try {
       // Call DB-based login utility
-      await login(email, password);
-      router.push("/dashboard"); // redirect to existing dashboard
+      await login(username, password);
+      router.replace("/dashboard"); // redirect to existing dashboard
     } catch (err) {
       setError(err instanceof Error ? err.message : "Login failed. Please try again.");
     } finally {
@@ -33,10 +33,10 @@ export default function LoginPage() {
         <h1 className="text-xl font-bold text-center">Cashier Login</h1>
 
         <input
-          type="email"
-          placeholder="Email"
-          value={email}
-          onChange={(e) => setEmail(e.target.value)}
+          type="text"
+          placeholder="Username"
+          value={username}
+          onChange={(e) => setUsername(e.target.value)}
           className="w-full border p-2 rounded"
           required
         />
