@@ -59,7 +59,7 @@ const DAYS = [
 
 export default function MenuDashboard() {
   const [selectedCategory, setSelectedCategory] = useState<"history" | "menu">(
-    "history"
+    "history",
   );
   const [user, setUser] = useState<User | null | undefined>(undefined);
   const [orders, setOrders] = useState<Order[]>([]);
@@ -142,7 +142,7 @@ export default function MenuDashboard() {
             Array.isArray(data.orders) ? data.orders : []
           ).map((o: Order) => ({ ...o, items: o.items || [] }));
           setOrders(
-            normalizedOrders.filter((o: Order) => o.status === "pending")
+            normalizedOrders.filter((o: Order) => o.status === "pending"),
           );
         } else if (data.type === "new_order") {
           if (data.order.status === "pending") {
@@ -195,7 +195,7 @@ export default function MenuDashboard() {
 
       if (res.ok) {
         setOrders((prev: Order[]) =>
-          prev.filter((o) => o.id !== selectedOrder.id)
+          prev.filter((o) => o.id !== selectedOrder.id),
         );
         setSelectedOrder(null);
       } else {
@@ -212,12 +212,33 @@ export default function MenuDashboard() {
     }
   };
 
-  const handleDenyOrder = () => setSelectedOrder(null);
+  const handleDenyOrder = async () => {
+    if (!selectedOrder) return;
+
+    try {
+      const res = await fetch(`http://localhost:3001/api/order/${selectedOrder.id}`, {
+  method: "DELETE",
+});
+
+
+      if (!res.ok) {
+        const errText = await res.text();
+        throw new Error(errText);
+      }
+
+      // Remove from UI immediately
+      setOrders((prev) => prev.filter((o) => o.id !== selectedOrder.id));
+
+      setSelectedOrder(null);
+    } catch (err) {
+      console.error("❌ Failed to deny order:", err);
+    }
+  };
 
   const openMenuModal = (item: MenuItem) => {
     setEditingItem(item);
     setSelectedDays(
-      item.availabilities?.map((a) => a.dayOfWeek.toLowerCase()) || []
+      item.availabilities?.map((a) => a.dayOfWeek.toLowerCase()) || [],
     );
   };
 
@@ -240,7 +261,7 @@ export default function MenuDashboard() {
 
   const toggleDay = (day: string) => {
     setSelectedDays((prev) =>
-      prev.includes(day) ? prev.filter((d) => d !== day) : [...prev, day]
+      prev.includes(day) ? prev.filter((d) => d !== day) : [...prev, day],
     );
   };
 
