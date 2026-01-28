@@ -212,28 +212,28 @@ export default function MenuDashboard() {
     }
   };
 
-  const handleDenyOrder = async () => {
-    if (!selectedOrder) return;
+ const handleDenyOrder = async () => {
+  if (!selectedOrder) return;
 
-    try {
-      const res = await fetch(`http://localhost:3001/api/order/${selectedOrder.id}`, {
-  method: "DELETE",
-});
+  try {
+    const res = await fetch(`${API_URL}/api/order/${selectedOrder.id}`, {
+      method: "DELETE",
+      credentials: "include", // keep if backend expects cookies
+      headers: { "Content-Type": "application/json" },
+    });
 
-
-      if (!res.ok) {
-        const errText = await res.text();
-        throw new Error(errText);
-      }
-
-      // Remove from UI immediately
-      setOrders((prev) => prev.filter((o) => o.id !== selectedOrder.id));
-
-      setSelectedOrder(null);
-    } catch (err) {
-      console.error("❌ Failed to deny order:", err);
+    if (!res.ok) {
+      const errText = await res.text();
+      throw new Error(errText);
     }
-  };
+
+    setOrders((prev) => prev.filter((o) => o.id !== selectedOrder.id));
+    setSelectedOrder(null);
+  } catch (err) {
+    console.error("❌ Failed to deny order:", err);
+  }
+};
+
 
   const openMenuModal = (item: MenuItem) => {
     setEditingItem(item);
